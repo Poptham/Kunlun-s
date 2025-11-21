@@ -135,6 +135,7 @@ body {
 .filter-btn.legendary {border-color: #ff7b00; color: #ff7b00;}
 .filter-btn.epic {border-color: #a970ff; color: #a970ff;}
 .filter-btn.rare {border-color: #1f6feb; color: #1f6feb;}
+.filter-btn.all {border-color: #00ff88; color: #00ff88;}
 
 /* inactive ต้องอยู่หลังสุด */
 .filter-btn.inactive {
@@ -307,11 +308,11 @@ body {
     <div class="search-box">
         <input type="text" id="searchInput" placeholder="Search for items..." />
     </div>
+    <button class="filter-btn all">All</button>
     <button class="filter-btn omega">Omega</button>
     <button class="filter-btn legendary">Legendary</button>
     <button class="filter-btn epic">Epic</button>
     <button class="filter-btn rare">Rare</button>
-    <!-- ลบปุ่ม common ออก -->
 </div>
 
 <!-- Grid -->
@@ -322,9 +323,9 @@ const BIN_ID = "69206a3943b1c97be9bbceef";
 const API_KEY = "$2a$10$bupM4/tI67/0cmeRDHWc4.wmhRSjksb9tgknDgpHJiKKYZYNp7IHi";
 const URL = `https://api.jsonbin.io/v3/b/${BIN_ID}/latest`;
 let allItems = [];
-let existingIds = new Set();
 let currentSearch = "";
-let currentRarity = []; // เปลี่ยนเป็น array
+let currentRarity = [];
+const MAX_ITEMS = 100; // จำนวนสูงสุดที่เก็บไว้
 
 function getRarityClass(r) {
     const m = (r+"").toLowerCase();
@@ -360,8 +361,25 @@ async function loadData() {
     try {
         const res = await fetch(URL, {headers: {"X-Master-Key": API_KEY}});
         const json = await res.json();
-        const items = json.record.items || [];
-        allItems = items.reverse();
+        const newItems = json.record.items || [];
+        
+        // เพิ่ม items ใหม่เข้าไปด้านหน้า (ไม่ลบของเก่า)
+        newItems.forEach(newItem => {
+            const uniqueKey = `${newItem.weaponName}_${newItem.playerName}_${newItem.jobId}`;
+            // ตรวจสอบว่ามีอยู่แล้วหรือไม่
+            const exists = allItems.some(item => 
+                `${item.weaponName}_${item.playerName}_${item.jobId}` === uniqueKey
+            );
+            if (!exists) {
+                allItems.unshift(newItem); // เพิ่มด้านหน้า
+            }
+        });
+        
+        // ถ้ามี items เกิน MAX_ITEMS ให้ลบของเก่าออก
+        if (allItems.length > MAX_ITEMS) {
+            allItems = allItems.slice(0, MAX_ITEMS);
+        }
+        
         renderItems();
     } catch(e) {
         console.error(e);
@@ -371,7 +389,8 @@ async function loadData() {
 function renderItems() {
     const list = document.getElementById("list");
     list.innerHTML = "";
-    existingIds = new Set();
+    const renderedIds = new Set();
+    
     allItems.forEach(item => {
         // Filter by search
         if (
@@ -385,8 +404,10 @@ function renderItems() {
         // Filter by rarity (เลือกได้หลายอัน)
         if (currentRarity.length > 0 && !currentRarity.includes((item.rarity || "").toLowerCase())) return;
 
-        if (existingIds.has(item.id)) return;
-        existingIds.add(item.id);
+        // ใช้ combination ของหลายฟิลด์เพื่อสร้าง unique key
+        const uniqueKey = `${item.weaponName}_${item.playerName}_${item.jobId}`;
+        if (renderedIds.has(uniqueKey)) return;
+        renderedIds.add(uniqueKey);
 
         const card = document.createElement("div");
         card.className = `card`;
@@ -401,7 +422,7 @@ function renderItems() {
                 <div class="server">Server: ${item.placeId}</div>
                 <div class="players">Job ID: ${item.jobId.substring(0, 8)}...</div>
                 <div class="status">• Just now</div>
-                <button class="get-jobid-btn" onclick="navigator.clipboard.writeText('${item.jobId}'); this.textContent='✓ Copied!';">✓ Get JobId</button>
+                <button class="get-jobid-btn" onclick="navigator.clipboard.writeText('${item.jobId}'); this.textContent='✓ Copied!'; setTimeout(() => this.textContent='✓ Get JobId', 2000);">✓ Get JobId</button>
             </div>
         `;
         list.appendChild(card);
@@ -414,17 +435,31 @@ document.getElementById("searchInput").addEventListener("input", function(e) {
     renderItems();
 });
 
-document.querySelectorAll(".filter-btn").forEach(btn => btn.classList.add("inactive"));
-
 document.querySelectorAll(".filter-btn").forEach(btn => {
     btn.addEventListener("click", function() {
+        if (btn.classList.contains("all")) {
+            // Reset all filters
+            document.querySelectorAll(".filter-btn").forEach(b => {
+                b.classList.remove("active");
+                b.classList.add("inactive");
+            });
+            btn.classList.add("active");
+            btn.classList.remove("inactive");
+            currentRarity = [];
+            renderItems();
+            return;
+        }
+
         const rarity = btn.classList.contains("omega") ? "omega"
             : btn.classList.contains("legendary") ? "legendary"
             : btn.classList.contains("epic") ? "epic"
             : btn.classList.contains("rare") ? "rare"
-            // : btn.classList.contains("common") ? "common"  // ลบ common ออก
             : null;
         if (!rarity) return;
+
+        // ปิด All button
+        document.querySelector(".filter-btn.all").classList.remove("active");
+        document.querySelector(".filter-btn.all").classList.add("inactive");
 
         if (btn.classList.contains("active")) {
             btn.classList.remove("active");
@@ -438,6 +473,10 @@ document.querySelectorAll(".filter-btn").forEach(btn => {
         renderItems();
     });
 });
+
+// Set All button as active by default
+document.querySelector(".filter-btn.all").classList.add("active");
+document.querySelector(".filter-btn.all").classList.remove("inactive");
 
 loadData();
 setInterval(loadData, 4000);
