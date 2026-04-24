@@ -1,2 +1,2 @@
 # Kunlun-s
-WTF ดูไรกัน
+WTF what r u looking?
