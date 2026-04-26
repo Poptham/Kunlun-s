@@ -509,10 +509,9 @@ local function createUI()
     end
     VBtn.MouseButton1Click:Connect(function()
         local key = KI.Text
-        if key == "" then
-            StatusLbl.Text = "⚠ Key Required"
-            return
-        end
+        
+        -- Allow authentication without key if PlaceID auto-load is possible
+        -- (The server will check if there's an active key for this HWID)
         
         VBtn.Text = "Verifying Kernel..."
         VBtn.Active = false
@@ -528,19 +527,25 @@ local function createUI()
             local jobId = game.JobId ~= "" and game.JobId or "local-session"
             local accountAge = tostring(LocalPlayer.AccountAge)
             
-            -- STAGE 1: Handshake for Challenge
         VBtn.Text = "Handshaking v6 (S1)..."
         local hResponse, hStatus = _0x_secureReq("handshake", {
-            key = key,
+            key = (key ~= "" and key or nil),
             hwid = hwid,
             placeId = tostring(game.PlaceId)
         })
 
         if not hResponse or hStatus ~= 200 then
             local hOk, hRes = pcall(_JSONDecode, HttpService, hResponse)
-            if hOk and hRes.message == "Banned" then
-                LocalPlayer:Kick("\n[Kunlun Hub]\nYour HWID is permanently banned.\nReason: " .. (hRes.reason or "No reason provided"))
-                return
+            if hOk then
+                if hRes.message == "Banned" then
+                    LocalPlayer:Kick("\n[Kunlun Hub]\nYour HWID is permanently banned.\nReason: " .. (hRes.reason or "No reason provided"))
+                    return
+                elseif hRes.message == "Active Key Required for Auto-load" then
+                    StatusLbl.Text = "⚠ Active Key Required"
+                    VBtn.Text = "Authenticate"
+                    VBtn.Active = true
+                    return
+                end
             end
             StatusLbl.Text = "✕ Handshake S1 Failed"
             VBtn.Text = "Authenticate"
@@ -554,6 +559,9 @@ local function createUI()
             VBtn.Active = true
             return
         end
+        
+        -- Use the key returned from server for S2 if auto-loaded
+        local finalKey = key ~= "" and key or hData.key or ""
 
         -- คำนวณคำตอบสำหรับ Challenge (SHA256(seed + hwid + jobId))
         local sha256 = function(data)
@@ -566,7 +574,7 @@ local function createUI()
 
          VBtn.Text = "Verifying Key (S2)..."
          local vResponse, vStatus = _0x_secureReq("verify-key", {
-             key = key,
+             key = finalKey,
              hwid = hwid,
              nonce = tostring(math.random(1000000, 9999999)),
              robloxUser = LocalPlayer.Name,
