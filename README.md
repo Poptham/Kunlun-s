@@ -1,2 +1,2 @@
 # Kunlun-s
-WTF what r u looking?
+lol skid detect kid
